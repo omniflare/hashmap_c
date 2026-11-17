@@ -1,0 +1,12 @@
+# Compiled binaries
+hashmap
+benchmark_bin
+
+# macOS debug symbols
+*.dSYM/
+
+# Object files
+*.o
+
+# Build artifacts
+build/
