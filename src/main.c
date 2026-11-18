@@ -1,53 +1,133 @@
-#include "hash_table.h"
+
 #include <stdio.h>
+#include <string.h>
+#include "hash_table.h"
 
-int main() {
+#define TEST_SIZE 10000
 
-  Hashmap *map = new_hashmap();
-  insert(map, "name", "Satyam");
-  insert(map, "age", "22");
-  insert(map, "city", "Delhi");
+static int test_hashmap(CollisionHandling handling, const char* name) {
+    printf("\n========== %s ==========\n", name);
 
-  printf("After insertion:\n");
-  printf("Count: %d\n", map->count);
+    Hashmap* map = new_hashmap(handling);
 
-  printf("\nSearching:\n");
-  printf("name: %s\n", search(map, "name"));
-  printf("age: %s\n", search(map, "age"));
-  printf("city: %s\n", search(map, "city"));
+    if (map == NULL) {
+        printf("Failed to create hashmap\n");
+        return 0;
+    }
 
-  // 3. Search for a key that doesn't exist
-  printf("\nSearching for missing key:\n");
-  char *result = search(map, "country");
-  printf("country: %s\n", result ? result : "Not found");
+    insert(map, "name", "Satyam");
+    insert(map, "city", "Delhi");
+    insert(map, "language", "C");
 
-  // 4. Update an existing key
-  insert(map, "name", "Satyam Jha");
+    if (map->count != 3) {
+        printf("Failed: incorrect count after insertion\n");
+        goto fail;
+    }
 
-  printf("\nAfter updating name:\n");
-  printf("name: %s\n", search(map, "name"));
-  printf("Count: %d\n", map->count);
+    char* value = search(map, "name");
 
-  // 5. Delete an existing key
-  remove_key(map, "age");
+    if (value == NULL || strcmp(value, "Satyam") != 0) {
+        printf("Failed: search\n");
+        goto fail;
+    }
 
-  printf("\nAfter deleting age:\n");
-  printf("Count: %d\n", map->count);
+    if (search(map, "country") != NULL) {
+        printf("Failed: missing key search\n");
+        goto fail;
+    }
 
-  result = search(map, "age");
-  printf("age: %s\n", result ? result : "Not found");
+    insert(map, "name", "Satyam Jha");
 
-  // 6. Delete a key that doesn't exist
-  remove_key(map, "country");
+    value = search(map, "name");
 
-  printf("\nAfter attempting to delete country:\n");
-  printf("Count: %d\n", map->count);
+    if (value == NULL || strcmp(value, "Satyam Jha") != 0) {
+        printf("Failed: update\n");
+        goto fail;
+    }
 
-  // 7. Verify remaining entries
-  printf("\nRemaining entries:\n");
-  printf("name: %s\n", search(map, "name"));
-  printf("city: %s\n", search(map, "city"));
+    if (map->count != 3) {
+        printf("Failed: count changed after update\n");
+        goto fail;
+    }
 
-  delete_hash_map(map);
-  return 0;
+    remove_key(map, "city");
+
+    if (search(map, "city") != NULL || map->count != 2) {
+        printf("Failed: deletion\n");
+        goto fail;
+    }
+
+    remove_key(map, "country");
+
+    if (map->count != 2) {
+        printf("Failed: count changed after deleting missing key\n");
+        goto fail;
+    }
+
+    // Insert enough entries to trigger resizing.
+    char key[32];
+    char val[32];
+
+    for (int i = 0; i < TEST_SIZE; i++) {
+        snprintf(key, sizeof(key), "key-%d", i);
+        snprintf(val, sizeof(val), "value-%d", i);
+        insert(map, key, val);
+    }
+
+    for (int i = 0; i < TEST_SIZE; i++) {
+        snprintf(key, sizeof(key), "key-%d", i);
+        snprintf(val, sizeof(val), "value-%d", i);
+
+        value = search(map, key);
+
+        if (value == NULL || strcmp(value, val) != 0) {
+            printf("Failed: lookup after resizing (%s)\n", key);
+            goto fail;
+        }
+    }
+
+    // Remove the inserted entries to exercise shrinking.
+    for (int i = 0; i < TEST_SIZE; i++) {
+        snprintf(key, sizeof(key), "key-%d", i);
+        remove_key(map, key);
+    }
+
+    if (map->count != 2) {
+        printf("Failed: incorrect count after bulk deletion\n");
+        goto fail;
+    }
+
+    if (search(map, "name") == NULL ||
+        search(map, "language") == NULL) {
+        printf("Failed: original entries lost after resizing\n");
+        goto fail;
+    }
+
+    delete_hash_map(map);
+    printf("Passed\n");
+    return 1;
+
+fail:
+    delete_hash_map(map);
+    return 0;
+}
+
+int main(void) {
+    int chaining_ok = test_hashmap(
+        CHAINING,
+        "Separate Chaining"
+    );
+
+    int double_hashing_ok = test_hashmap(
+        DOUBLE_HASHING,
+        "Double Hashing"
+    );
+
+    if (chaining_ok && double_hashing_ok) {
+        printf("\nAll tests passed!\n");
+        return 0;
+    }
+
+    printf("\nSome tests failed.\n");
+    return 1;
 }
